@@ -1,13 +1,51 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { useLocation, Link } from 'react-router-dom';
 import PageContainer from '../components/layout/PageContainer';
 import Card from '../components/common/Card';
 import Button from '../components/common/Button';
 import PuzzleBoard from '../components/puzzle/PuzzleBoard';
+import { getGoalState } from '../puzzles/numericalPuzzle.js';
+import { formatTime, formatNumber } from '../utils/performanceUtils.js';
 
 export default function Result() {
-  // Solved 3x3 goal state
-  const solvedTiles = [1, 2, 3, 4, 5, 6, 7, 8, 0];
+  const location = useLocation();
+
+  // Retrieve solver result data from navigation state or sessionStorage
+  const [resultData] = useState(() => {
+    if (location.state && location.state.solved !== undefined) {
+      return location.state;
+    }
+    try {
+      const saved = sessionStorage.getItem('puzzle_solver_result');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.warn('Unable to load result from sessionStorage:', e);
+    }
+    return null;
+  });
+
+  const gridSize = resultData?.gridSize || 3;
+  const algorithm = (resultData?.algorithm || 'BFS').toUpperCase();
+  const moves = resultData?.solutionDepth !== undefined ? resultData.solutionDepth : (resultData?.solutionPath?.length ? resultData.solutionPath.length - 1 : 0);
+  const solvedTiles = getGoalState(gridSize);
+
+  const bfsMetrics =
+    algorithm === 'BFS' && resultData
+      ? {
+          states: formatNumber(resultData.statesExplored),
+          moves: resultData.solutionDepth,
+          time: formatTime(resultData.executionTime),
+        }
+      : { states: '--', moves: '--', time: '--' };
+
+  const dfsMetrics =
+    algorithm === 'DFS' && resultData
+      ? {
+          states: formatNumber(resultData.statesExplored),
+          moves: resultData.solutionDepth,
+          time: formatTime(resultData.executionTime),
+        }
+      : { states: '--', moves: '--', time: '--' };
 
   return (
     <PageContainer>
@@ -21,21 +59,26 @@ export default function Result() {
             PUZZLE SOLVED <span style={{ color: 'var(--color-success)' }}>✓</span>
           </h1>
           <p style={{ fontSize: '1.25rem', fontWeight: '700', color: 'var(--color-text-muted)' }}>
-            Solved in <span style={{ color: 'var(--color-text)' }}>0 moves</span>
+            Solved in <span style={{ color: 'var(--color-text)' }}>{moves} {moves === 1 ? 'move' : 'moves'}</span> via <span className="badge badge-yellow" style={{ fontSize: '0.9rem' }}>{algorithm}</span>
           </p>
         </div>
 
         {/* Solved Board Display */}
         <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <div style={{ width: '100%', maxWidth: '360px' }}>
-            <PuzzleBoard tiles={solvedTiles} gridSize={3} />
+          <div style={{ width: '100%', maxWidth: gridSize === 4 ? '420px' : '360px' }}>
+            <PuzzleBoard
+              tiles={solvedTiles}
+              gridSize={gridSize}
+              puzzleType={resultData?.puzzleType || 'numerical'}
+              imageTilesMap={resultData?.puzzleType === 'image' ? resultData?.imageTilesMap : null}
+            />
           </div>
         </div>
 
         {/* Performance Comparison Section */}
-        <Card title="PERFORMANCE COMPARISON (BFS vs DFS)" icon="📈">
+        <Card title="PERFORMANCE ANALYSIS" icon="📈">
           <p style={{ fontSize: '0.9rem', marginBottom: 'var(--space-3)' }}>
-            Empirical benchmark metrics between Breadth-First Search and Depth-First Search for this puzzle state.
+            Empirical search metrics recorded by the {algorithm} solver algorithm for this puzzle instance.
           </p>
           <div className="comparison-table-wrapper">
             <table className="comparison-table">
@@ -49,23 +92,23 @@ export default function Result() {
               <tbody>
                 <tr>
                   <td>States Explored</td>
-                  <td>--</td>
-                  <td>--</td>
+                  <td>{bfsMetrics.states}</td>
+                  <td>{dfsMetrics.states}</td>
                 </tr>
                 <tr>
                   <td>Solution Moves</td>
-                  <td>--</td>
-                  <td>--</td>
+                  <td>{bfsMetrics.moves}</td>
+                  <td>{dfsMetrics.moves}</td>
                 </tr>
                 <tr>
                   <td>Execution Time</td>
-                  <td>--</td>
-                  <td>--</td>
+                  <td>{bfsMetrics.time}</td>
+                  <td>{dfsMetrics.time}</td>
                 </tr>
                 <tr>
                   <td>Optimality</td>
                   <td>Guaranteed Shortest</td>
-                  <td>Non-Optimal</td>
+                  <td>Branch Deep Search</td>
                 </tr>
               </tbody>
             </table>

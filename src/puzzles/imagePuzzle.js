@@ -2,7 +2,7 @@
  * Image Sliding Puzzle Logic Module
  * Slices uploaded images via HTML5 Canvas into interactive tile slices.
  */
-import { generateSolvableShuffle, getGoalState } from './numericalPuzzle';
+import { generateSolvableShuffle, getGoalState } from './numericalPuzzle.js';
 
 /**
  * Loads an image from a URL or data URL and returns an HTMLImageElement
