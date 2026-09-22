@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageContainer from '../components/layout/PageContainer';
 import SectionTitle from '../components/common/SectionTitle';
@@ -10,51 +10,157 @@ import GridSelector from '../components/puzzle/GridSelector';
 import AlgorithmSelector from '../components/puzzle/AlgorithmSelector';
 import ImageUploader from '../components/puzzle/ImageUploader';
 import PuzzleControls from '../components/puzzle/PuzzleControls';
+import {
+  getGoalState,
+  moveTile,
+  generateSolvableShuffle,
+} from '../puzzles/numericalPuzzle';
+import { sliceImageToTiles } from '../puzzles/imagePuzzle';
+import { isSolved } from '../utils/puzzleUtils';
 
 export default function Puzzle() {
   const navigate = useNavigate();
 
-  // Foundation UI states (No complex algorithm logic yet)
+  // Primary Configuration States
   const [puzzleType, setPuzzleType] = useState('numerical');
   const [gridSize, setGridSize] = useState(3);
   const [algorithm, setAlgorithm] = useState('BFS');
   const [moves, setMoves] = useState(0);
 
-  // Sample placeholder board representations
-  const sample3x3 = [6, 2, 3, 7, 0, 5, 8, 1, 4];
-  const sample4x4 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 0, 15];
+  // Dynamic Board State
+  const [puzzleState, setPuzzleState] = useState(() => getGoalState(3));
 
-  const currentTiles = gridSize === 4 ? sample4x4 : sample3x3;
-  const boardTitle = gridSize === 4 ? '15-PUZZLE' : '8-PUZZLE';
+  // Image Puzzle States
+  const [uploadedImage, setUploadedImage] = useState(null);
+  const [imageTilesMap, setImageTilesMap] = useState(null);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [validationError, setValidationError] = useState('');
 
-  const handleSolveNavigation = () => {
-    // Navigate to solver visualization page
-    navigate('/solver', {
-      state: {
-        puzzleType,
-        gridSize,
-        algorithm,
-      },
-    });
-  };
+  // Check if current puzzle board is in solved goal state
+  const goalState = getGoalState(gridSize);
+  const isCurrentStateSolved = isSolved(puzzleState, goalState);
 
-  const handleShuffleClick = () => {
-    // Placeholder click handler
-    console.log('Shuffle requested');
-  };
-
-  const handleResetClick = () => {
-    // Placeholder click handler
+  // Sync board state when grid size changes
+  useEffect(() => {
+    const newGoal = getGoalState(gridSize);
+    setPuzzleState(newGoal);
     setMoves(0);
-    console.log('Reset requested');
+    setValidationError('');
+
+    // If an image is already uploaded and grid size changed, re-slice image for new grid
+    if (puzzleType === 'image' && uploadedImage) {
+      handleGenerateImagePuzzle(uploadedImage, gridSize);
+    }
+  }, [gridSize]);
+
+  // Handle switching between Numerical and Image modes
+  const handleSelectPuzzleType = (type) => {
+    setPuzzleType(type);
+    setValidationError('');
+    setMoves(0);
+    const goal = getGoalState(gridSize);
+    setPuzzleState(goal);
   };
+
+  // Image upload handler
+  const handleImageSelect = (dataUrl) => {
+    setUploadedImage(dataUrl);
+    setValidationError('');
+    handleGenerateImagePuzzle(dataUrl, gridSize);
+  };
+
+  // Slices uploaded image into grid tiles and shuffles
+  const handleGenerateImagePuzzle = async (imgSrc, currentGridSize) => {
+    const targetSrc = imgSrc || uploadedImage;
+    if (!targetSrc) {
+      setValidationError('Please upload an image first.');
+      return;
+    }
+
+    try {
+      setIsGeneratingImage(true);
+      setValidationError('');
+      const slicedMap = await sliceImageToTiles(targetSrc, currentGridSize);
+      setImageTilesMap(slicedMap);
+      const shuffledState = generateSolvableShuffle(currentGridSize, 60);
+      setPuzzleState(shuffledState);
+      setMoves(0);
+    } catch (err) {
+      console.error('Failed to generate image puzzle:', err);
+      setValidationError('Failed to process image. Please try another image.');
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
+
+  // Interactive Tile Click Handler
+  const handleTileClick = (clickedIndex) => {
+    // If in image mode and image has not been generated yet, prompt user
+    if (puzzleType === 'image' && !imageTilesMap) {
+      setValidationError('Please upload and slice an image first.');
+      return;
+    }
+
+    const nextState = moveTile(puzzleState, clickedIndex, gridSize);
+    if (nextState) {
+      setPuzzleState(nextState);
+      setMoves((prev) => prev + 1);
+      setValidationError('');
+    }
+  };
+
+  // Shuffle button handler (generates a guaranteed solvable permutation)
+  const handleShuffle = () => {
+    const shuffled = generateSolvableShuffle(gridSize, 60);
+    setPuzzleState(shuffled);
+    setMoves(0);
+    setValidationError('');
+  };
+
+  // Reset button handler (restores solved goal state)
+  const handleReset = () => {
+    const solved = getGoalState(gridSize);
+    setPuzzleState(solved);
+    setMoves(0);
+    setValidationError('');
+  };
+
+  // Navigate to Solver page with current dynamic configuration
+  const handleSolveNavigation = () => {
+    if (puzzleType === 'image' && !imageTilesMap) {
+      setValidationError('Please upload and generate an image puzzle before solving.');
+      return;
+    }
+
+    const solverConfig = {
+      puzzleType,
+      gridSize,
+      algorithm,
+      puzzleState,
+      goalState,
+      moves,
+      imageTilesMap: puzzleType === 'image' ? imageTilesMap : null,
+      uploadedImage: puzzleType === 'image' ? uploadedImage : null,
+    };
+
+    // Store in sessionStorage for reliability
+    try {
+      sessionStorage.setItem('puzzle_solver_config', JSON.stringify(solverConfig));
+    } catch (e) {
+      console.warn('SessionStorage quota exceeded or disabled:', e);
+    }
+
+    navigate('/solver', { state: solverConfig });
+  };
+
+  const boardTitle = gridSize === 4 ? '15-PUZZLE' : '8-PUZZLE';
 
   return (
     <PageContainer>
       <SectionTitle
         tag="Puzzle Setup"
         title="Interactive Puzzle Arena"
-        subtitle="Configure your sliding puzzle parameters and prepare the search algorithm."
+        subtitle="Configure your sliding puzzle parameters, test interactive moves, and prepare search algorithms."
       />
 
       <div className="puzzle-layout">
@@ -63,13 +169,19 @@ export default function Puzzle() {
           <Card title="PUZZLE TYPE" icon="⚙️">
             <PuzzleTypeSelector
               selectedType={puzzleType}
-              onSelectType={setPuzzleType}
+              onSelectType={handleSelectPuzzleType}
             />
           </Card>
 
           {puzzleType === 'image' && (
             <Card title="IMAGE SOURCE" icon="🖼">
-              <ImageUploader onImageSelect={(file) => console.log('File selected:', file)} />
+              <ImageUploader
+                previewUrl={uploadedImage}
+                onImageSelect={handleImageSelect}
+                onGeneratePuzzle={() => handleGenerateImagePuzzle(uploadedImage, gridSize)}
+                isGenerating={isGeneratingImage}
+                hasGenerated={Boolean(imageTilesMap)}
+              />
             </Card>
           )}
 
@@ -89,14 +201,28 @@ export default function Puzzle() {
 
           <Card title="ACTIONS" icon="🎮">
             <PuzzleControls
-              onShuffle={handleShuffleClick}
-              onReset={handleResetClick}
+              onShuffle={handleShuffle}
+              onReset={handleReset}
             />
           </Card>
 
+          {validationError && (
+            <div className="puzzle-alert puzzle-alert-warning">
+              <span>⚠️</span>
+              <span>{validationError}</span>
+            </div>
+          )}
+
+          {isCurrentStateSolved && moves > 0 && (
+            <div className="puzzle-alert puzzle-alert-success">
+              <span>🎉</span>
+              <span><strong>Solved!</strong> Goal reached in {moves} moves.</span>
+            </div>
+          )}
+
           <div className="instruction-box">
             <span>💡</span>
-            <span>Move a tile next to the empty space to solve the puzzle.</span>
+            <span>Move a tile adjacent to the empty slot (0) to slide. Click Shuffle to generate a random solvable puzzle.</span>
           </div>
         </aside>
 
@@ -110,9 +236,11 @@ export default function Puzzle() {
           </div>
 
           <PuzzleBoard
-            tiles={currentTiles}
+            tiles={puzzleState}
             gridSize={gridSize}
-            onTileClick={(idx) => console.log('Tile clicked at index:', idx)}
+            puzzleType={puzzleType}
+            imageTilesMap={imageTilesMap}
+            onTileClick={handleTileClick}
           />
 
           <div style={{ width: '100%', maxWidth: '440px' }}>

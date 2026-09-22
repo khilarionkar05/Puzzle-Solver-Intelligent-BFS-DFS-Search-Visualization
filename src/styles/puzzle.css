@@ -210,6 +210,79 @@
   color: #065F46;
 }
 
+.puzzle-tile.puzzle-tile-image {
+  background-size: cover;
+  background-position: center;
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+}
+
+.puzzle-tile.puzzle-tile-image:hover:not(.tile-empty) {
+  filter: brightness(1.08);
+}
+
+.puzzle-tile-image .tile-badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: var(--border-radius-sm);
+  background-color: var(--color-secondary);
+  color: var(--color-text);
+  border: var(--border-width-sm) solid var(--color-border);
+  box-shadow: 1px 1px 0px var(--color-border);
+  line-height: 1.2;
+}
+
+.image-preview-wrapper {
+  position: relative;
+  width: 100%;
+  border-radius: var(--border-radius);
+  overflow: hidden;
+  border: var(--border-width) solid var(--color-border);
+  box-shadow: var(--box-shadow-sm);
+  aspect-ratio: 16 / 9;
+  max-height: 140px;
+  background-color: #000;
+}
+
+.image-preview-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+}
+
+.puzzle-alert {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--border-radius);
+  border: var(--border-width) solid var(--color-border);
+  font-size: 0.875rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.puzzle-alert-warning {
+  background-color: #FEF3C7;
+  color: #78350F;
+}
+
+.puzzle-alert-success {
+  background-color: #D1FAE5;
+  color: #065F46;
+}
+
+.puzzle-alert-info {
+  background-color: #E0F2FE;
+  color: #0369A1;
+}
+
 /* Solver & Result Metrics Grid */
 .metrics-grid {
   display: grid;
