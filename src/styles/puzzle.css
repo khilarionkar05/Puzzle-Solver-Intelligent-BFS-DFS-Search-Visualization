@@ -1,0 +1,314 @@
+@import './variables.css';
+
+/* Puzzle Page Grid Layout */
+.puzzle-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .puzzle-layout {
+    grid-template-columns: 360px 1fr;
+    gap: var(--space-8);
+  }
+}
+
+/* Control Panel (Left column) */
+.controls-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.panel-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.button-group-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+}
+
+/* Form Select / Input Controls */
+.custom-select {
+  width: 100%;
+  padding: 0.65rem 1rem;
+  border-radius: var(--border-radius);
+  border: var(--border-width) solid var(--color-border);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--box-shadow-sm);
+  outline: none;
+  transition: all var(--transition-fast);
+}
+
+.custom-select:focus {
+  box-shadow: var(--box-shadow);
+  border-color: var(--color-primary-hover);
+}
+
+/* Instructions Banner */
+.instruction-box {
+  background-color: #FEF3C7;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-3) var(--space-4);
+  font-size: 0.875rem;
+  color: #78350F;
+  font-weight: 600;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+/* Image Uploader Component */
+.image-uploader {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.upload-dropzone {
+  border: var(--border-width) dashed var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-5);
+  text-align: center;
+  background-color: var(--color-surface-alt);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.upload-dropzone:hover {
+  background-color: #E0F2FE;
+  border-color: #0284C7;
+}
+
+.upload-icon {
+  font-size: 2rem;
+}
+
+.upload-text {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+/* Right Panel / Puzzle Area */
+.puzzle-board-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  width: 100%;
+}
+
+.board-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  max-width: 440px;
+}
+
+.board-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+}
+
+.board-stats {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.stat-pill {
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  padding: 0.25rem 0.75rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  box-shadow: var(--box-shadow-sm);
+}
+
+/* The Puzzle Board Matrix */
+.puzzle-board {
+  display: grid;
+  gap: 8px;
+  background-color: var(--color-border);
+  padding: 10px;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--box-shadow-lg);
+  width: 100%;
+  max-width: 440px;
+  aspect-ratio: 1 / 1;
+}
+
+.puzzle-board-3x3 {
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+}
+
+.puzzle-board-4x4 {
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 6px;
+  padding: 8px;
+}
+
+/* Puzzle Tile */
+.puzzle-tile {
+  background-color: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.75rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--color-text);
+  box-shadow: var(--box-shadow-sm);
+  user-select: none;
+  cursor: pointer;
+  transition: transform var(--transition-fast), background-color var(--transition-fast);
+}
+
+.puzzle-board-4x4 .puzzle-tile {
+  font-size: 1.35rem;
+}
+
+.puzzle-tile:hover:not(.tile-empty) {
+  background-color: var(--color-primary);
+  transform: scale(0.98);
+}
+
+.puzzle-tile.tile-empty {
+  background-color: rgba(241, 245, 249, 0.4);
+  border: 2px dashed rgba(0, 0, 0, 0.2);
+  box-shadow: none;
+  cursor: default;
+}
+
+.puzzle-tile.tile-correct {
+  background-color: #D1FAE5;
+  border-color: #059669;
+  color: #065F46;
+}
+
+/* Solver & Result Metrics Grid */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.metric-card {
+  background-color: var(--color-surface-alt);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--space-3);
+  text-align: center;
+}
+
+.metric-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+  margin-bottom: var(--space-1);
+}
+
+.metric-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--color-text);
+}
+
+/* Status Indicator */
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--border-radius-full);
+  border: var(--border-width) solid var(--color-border);
+  font-weight: 800;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+}
+
+.status-ready {
+  background-color: var(--color-secondary);
+}
+
+.status-running {
+  background-color: var(--color-primary);
+}
+
+.status-success {
+  background-color: var(--color-success);
+  color: #fff;
+}
+
+/* Performance Comparison Table */
+.comparison-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  margin-top: var(--space-4);
+}
+
+.comparison-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius);
+  overflow: hidden;
+}
+
+.comparison-table th, 
+.comparison-table td {
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  border-bottom: var(--border-width) solid var(--color-border);
+  font-size: 0.95rem;
+}
+
+.comparison-table th {
+  background-color: var(--color-surface-alt);
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+}
+
+.comparison-table th:not(:last-child),
+.comparison-table td:not(:last-child) {
+  border-right: var(--border-width) solid var(--color-border);
+}
+
+.comparison-table tr:last-child td {
+  border-bottom: none;
+}
+
+.comparison-table td {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
