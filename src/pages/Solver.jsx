@@ -244,13 +244,47 @@ export default function Solver() {
 
   const totalSteps = solutionPath.length > 0 ? solutionPath.length - 1 : 0;
 
+  const statusLabel =
+    solverStatus === 'SOLVING'
+      ? 'SOLVING'
+      : solverStatus === 'SOLVED'
+      ? 'SOLVED'
+      : solverStatus === 'UNSOLVABLE'
+      ? 'UNSOLVABLE'
+      : solverStatus === 'SEARCH LIMIT REACHED'
+      ? 'SEARCH LIMIT REACHED'
+      : solverStatus === 'ERROR'
+      ? 'ERROR'
+      : 'READY';
+
+  const statusMessage =
+    solverStatus === 'SOLVING'
+      ? 'Searching for a solution...'
+      : solverStatus === 'SOLVED'
+      ? 'Solution found successfully.'
+      : solverStatus === 'UNSOLVABLE'
+      ? 'This puzzle configuration is not solvable.'
+      : solverStatus === 'SEARCH LIMIT REACHED'
+      ? 'Search stopped after reaching the configured exploration limit.'
+      : solverStatus === 'ERROR'
+      ? 'Unable to complete the search.'
+      : 'Ready to start the search.';
+
+  const liveVisitedStates = solutionPath.length > 0 ? solutionPath.slice(0, 6).map((state) => state.join(' ')) : [];
+  const recentQueueOrStack = algorithm === 'BFS' ? 'Queue' : 'Stack';
+
   return (
     <PageContainer>
-      <SectionTitle
-        tag="DAA Visualization"
-        title={`${algorithm} SOLVER`}
-        subtitle="Visualizing state space tree exploration using search algorithms."
-      />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
+        <SectionTitle
+          tag="DAA Visualization"
+          title="PUZZLE SOLVER"
+          subtitle="Visualizing state space tree exploration using search algorithms."
+        />
+        <div className="status-indicator status-ready" style={{ marginTop: '0.5rem' }}>
+          ● {statusLabel}
+        </div>
+      </div>
 
       <div className="puzzle-layout">
         {/* LEFT COLUMN: Puzzle Board Display & Step Controls */}
@@ -274,17 +308,49 @@ export default function Solver() {
                   : 'status-ready'
               }`}
             >
-              ● {solverStatus}
+              ● {statusLabel}
             </div>
           </div>
 
-          {/* Puzzle Board Rendering */}
           <PuzzleBoard
             tiles={activeTiles}
             gridSize={gridSize}
             puzzleType={puzzleType}
             imageTilesMap={imageTilesMap}
           />
+
+          <div className="puzzle-alert puzzle-alert-warning" style={{ width: '100%', maxWidth: '440px' }}>
+            <span>●</span>
+            <span>{statusMessage}</span>
+          </div>
+
+          <div className="card" style={{ width: '100%', maxWidth: '440px', padding: 'var(--space-3)', border: '2px solid var(--color-text)', borderRadius: '12px', background: '#fff', boxShadow: '4px 4px 0 rgba(20,24,42,0.9)' }}>
+            <div style={{ fontWeight: 800, fontSize: '0.8rem', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 'var(--space-2)' }}>
+              Search Exploration
+            </div>
+            <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
+              <div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 700, marginBottom: '0.3rem' }}>Current State</div>
+                <div style={{ fontSize: '0.9rem', fontWeight: 700, wordBreak: 'break-word' }}>
+                  {activeTiles.join(' ')}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 700, marginBottom: '0.3rem' }}>Visited States</div>
+                <div style={{ fontSize: '0.8rem', lineHeight: '1.6' }}>
+                  {liveVisitedStates.length > 0 ? liveVisitedStates.map((state, index) => (
+                    <div key={index} style={{ fontWeight: index === 0 ? 700 : 500 }}>{state}</div>
+                  )) : <span>—</span>}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 700, marginBottom: '0.3rem' }}>{recentQueueOrStack}</div>
+                <div style={{ fontSize: '0.9rem', fontWeight: 700 }}>
+                  {algorithm === 'BFS' ? 'FIFO — First In, First Out' : 'LIFO — Last In, First Out'}
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Error / No Solution Message */}
           {errorMessage && (
@@ -437,10 +503,10 @@ export default function Solver() {
                 variant="primary"
                 size="lg"
                 fullWidth
-                onClick={handleStartSolver}
+                onClick={solverStatus === 'SOLVED' ? () => { setCurrentStep(0); setIsPlaying(true); } : handleStartSolver}
                 disabled={solverStatus === 'SOLVING'}
               >
-                {solverStatus === 'SOLVING' ? '⚙️ SOLVING...' : '▶ START SOLVER'}
+                {solverStatus === 'SOLVING' ? '⏸ PAUSE' : solverStatus === 'SOLVED' ? '▶ REPLAY SOLUTION' : '▶ START SOLVER'}
               </Button>
 
               <Button
