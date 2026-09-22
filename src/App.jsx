@@ -4,7 +4,7 @@ import Home from './pages/Home';
 import Puzzle from './pages/Puzzle';
 import Solver from './pages/Solver';
 import Result from './pages/Result';
-import SearchTreeVisualizer from './pages/SearchTreeVisualizer';
+import SearchTreeVisualizer from './pages/SearchTreeVisualizer.jsx';
 import HowItWorks from './pages/HowItWorks';
 
 export default function App() {
