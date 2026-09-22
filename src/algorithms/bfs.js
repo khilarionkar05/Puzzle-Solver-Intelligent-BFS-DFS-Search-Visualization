@@ -29,12 +29,17 @@ export const MAX_STATES = 5000000;
  *   error?: string
  * }}
  */
-export function solveBFS(initialState, customGoalState = null, gridSize = 3, maxStates = MAX_STATES) {
+export function solveBFS(initialState, customGoalState = null, gridSize = 3, maxStates = MAX_STATES, onEvent = null) {
   const startTime = performance.now();
 
   const goalState = customGoalState || getGoalState(gridSize);
   const goalKey = goalState.join(',');
   const initialKey = initialState.join(',');
+  const emit = (type, payload = {}) => {
+    if (typeof onEvent === 'function') {
+      onEvent({ type, ...payload });
+    }
+  };
 
   // 1. Mathematical Solvability Verification BEFORE search
   if (!isSolvable(initialState, gridSize)) {
@@ -72,6 +77,37 @@ export function solveBFS(initialState, customGoalState = null, gridSize = 3, max
   }
 
   const initialEmptyIndex = initialState.indexOf(0);
+  const nodeLookup = new Map();
+  let nextNodeId = 1;
+
+  const createNode = ({ state, parentId = null, depth = 0, move = null, searchOrder = null }) => {
+    const key = state.join(',');
+    let node = nodeLookup.get(key);
+    if (!node) {
+      node = {
+        id: nextNodeId++,
+        state: [...state],
+        parentId,
+        depth,
+        move,
+        searchOrder,
+      };
+      nodeLookup.set(key, node);
+    }
+    if (parentId !== null && node.parentId === null) node.parentId = parentId;
+    if (searchOrder !== null) node.searchOrder = searchOrder;
+    return node;
+  };
+
+  const rootNode = createNode({ state: initialState, depth: 0, searchOrder: 1 });
+  emit('root', {
+    nodeId: rootNode.id,
+    state: initialState,
+    parentId: null,
+    depth: 0,
+    move: null,
+    searchOrder: 1,
+  });
 
   // FIFO Queue with head pointer index to avoid O(N) Array.shift() overhead
   const queue = [
@@ -80,6 +116,8 @@ export function solveBFS(initialState, customGoalState = null, gridSize = 3, max
       emptyIndex: initialEmptyIndex,
       parent: null,
       depth: 0,
+      nodeId: rootNode.id,
+      move: null,
     },
   ];
 
@@ -93,6 +131,23 @@ export function solveBFS(initialState, customGoalState = null, gridSize = 3, max
   while (head < queue.length) {
     const current = queue[head++];
     statesExplored++;
+
+    const currentNode = createNode({
+      state: current.state,
+      parentId: current.parent ? current.parent.nodeId : null,
+      depth: current.depth,
+      move: current.move,
+      searchOrder: statesExplored,
+    });
+
+    emit('expand', {
+      nodeId: currentNode.id,
+      state: current.state,
+      parentId: current.parent ? current.parent.nodeId : null,
+      depth: current.depth,
+      move: current.move,
+      searchOrder: statesExplored,
+    });
 
     // Check goal condition
     if (current.state.join(',') === goalKey) {
@@ -137,17 +192,52 @@ export function solveBFS(initialState, customGoalState = null, gridSize = 3, max
         visited.add(nextKey);
         nodesGenerated++;
 
+        const moveDirection = (() => {
+          const blankRow = Math.floor(current.emptyIndex / gridSize);
+          const blankCol = current.emptyIndex % gridSize;
+          const targetRow = Math.floor(targetIndex / gridSize);
+          const targetCol = targetIndex % gridSize;
+          if (targetRow === blankRow - 1 && targetCol === blankCol) return 'UP';
+          if (targetRow === blankRow + 1 && targetCol === blankCol) return 'DOWN';
+          if (targetRow === blankRow && targetCol === blankCol - 1) return 'LEFT';
+          if (targetRow === blankRow && targetCol === blankCol + 1) return 'RIGHT';
+          return null;
+        })();
+
+        const childNode = createNode({
+          state: nextState,
+          parentId: current.nodeId,
+          depth: current.depth + 1,
+          move: moveDirection,
+        });
+
+        emit('generate', {
+          nodeId: childNode.id,
+          parentId: current.nodeId,
+          state: nextState,
+          depth: current.depth + 1,
+          move: moveDirection,
+          searchOrder: nodesGenerated,
+        });
+
         queue.push({
           state: nextState,
           emptyIndex: targetIndex,
           parent: current,
           depth: current.depth + 1,
+          nodeId: childNode.id,
+          move: moveDirection,
         });
       }
     }
   }
 
   const endTime = performance.now();
+  emit('search_limit', {
+    statesExplored,
+    nodesGenerated,
+  });
+
   return {
     solved: false,
     terminationReason: 'search_limit',

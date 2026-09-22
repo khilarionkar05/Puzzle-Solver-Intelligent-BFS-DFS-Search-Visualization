@@ -4,6 +4,7 @@ import Home from './pages/Home';
 import Puzzle from './pages/Puzzle';
 import Solver from './pages/Solver';
 import Result from './pages/Result';
+import SearchTreeVisualizer from './pages/SearchTreeVisualizer';
 import HowItWorks from './pages/HowItWorks';
 
 export default function App() {
@@ -13,6 +14,7 @@ export default function App() {
       <Route path="/puzzle" element={<Puzzle />} />
       <Route path="/solver" element={<Solver />} />
       <Route path="/result" element={<Result />} />
+      <Route path="/tree" element={<SearchTreeVisualizer />} />
       <Route path="/how-it-works" element={<HowItWorks />} />
       {/* Fallback route */}
       <Route path="*" element={<Home />} />

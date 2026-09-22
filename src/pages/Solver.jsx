@@ -512,10 +512,18 @@ export default function Solver() {
               <Button
                 variant="outline"
                 fullWidth
+                onClick={() => navigate('/tree', { state: { algorithm, puzzleType, gridSize, puzzleState: initialPuzzleState, goalState: getGoalState(gridSize), imageTilesMap, solverStatus, statesExplored, nodesGenerated, executionTime, solutionPath, solutionDepth } })}
+              >
+                🌳 VIEW SEARCH TREE
+              </Button>
+
+              <Button
+                variant="outline"
+                fullWidth
                 onClick={handleReset}
                 disabled={solverStatus === 'SOLVING'}
               >
-                🔄 RESET TO INITIAL
+                ↻ RESET TO INITIAL
               </Button>
             </div>
           </Card>
@@ -546,14 +554,24 @@ export default function Solver() {
 
           {/* Quick link to result analysis page */}
           {solverStatus === 'SOLVED' && (
-            <Button
-              variant="success"
-              size="lg"
-              fullWidth
-              onClick={handleViewResult}
-            >
-              🏁 VIEW PERFORMANCE RESULT
-            </Button>
+            <>
+              <Button
+                variant="success"
+                size="lg"
+                fullWidth
+                onClick={handleViewResult}
+              >
+                🏁 VIEW PERFORMANCE RESULT
+              </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                fullWidth
+                onClick={() => navigate('/tree', { state: { puzzleType, gridSize, algorithm, puzzleState: initialPuzzleState, imageTilesMap } })}
+              >
+                🌳 VIEW SEARCH TREE
+              </Button>
+            </>
           )}
         </aside>
       </div>

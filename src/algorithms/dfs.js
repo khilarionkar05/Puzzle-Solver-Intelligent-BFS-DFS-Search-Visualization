@@ -36,13 +36,19 @@ export function solveDFS(
   customGoalState = null,
   gridSize = 3,
   maxDepth = 26,
-  maxStates = MAX_STATES
+  maxStates = MAX_STATES,
+  onEvent = null
 ) {
   const startTime = performance.now();
 
   const goalState = customGoalState || getGoalState(gridSize);
   const goalKey = goalState.join(',');
   const initialKey = initialState.join(',');
+  const emit = (type, payload = {}) => {
+    if (typeof onEvent === 'function') {
+      onEvent({ type, ...payload });
+    }
+  };
 
   // 1. Mathematical Solvability Verification BEFORE search
   if (!isSolvable(initialState, gridSize)) {
@@ -82,6 +88,37 @@ export function solveDFS(
   let statesExplored = 0;
   let nodesGenerated = 1;
   let reachedSafetyLimit = false;
+  const nodeLookup = new Map();
+  let nextNodeId = 1;
+
+  const createNode = ({ state, parentId = null, depth = 0, move = null, searchOrder = null }) => {
+    const key = state.join(',');
+    let node = nodeLookup.get(key);
+    if (!node) {
+      node = {
+        id: nextNodeId++,
+        state: [...state],
+        parentId,
+        depth,
+        move,
+        searchOrder,
+      };
+      nodeLookup.set(key, node);
+    }
+    if (parentId !== null && node.parentId === null) node.parentId = parentId;
+    if (searchOrder !== null) node.searchOrder = searchOrder;
+    return node;
+  };
+
+  const rootNode = createNode({ state: initialState, depth: 0, searchOrder: 1 });
+  emit('root', {
+    nodeId: rootNode.id,
+    state: initialState,
+    parentId: null,
+    depth: 0,
+    move: null,
+    searchOrder: 1,
+  });
 
   // Transposition table mapping state string -> minimum depth encountered in current iteration
   const visitedMinDepth = new Map();
@@ -91,7 +128,7 @@ export function solveDFS(
    * Prevents cycles on the active call stack path while pruning states
    * already encountered at an equal or shallower depth in the current limit iteration.
    */
-  function dls(state, emptyIndex, depth, limit, path, pathSet) {
+  function dls(state, emptyIndex, depth, limit, path, pathSet, parentNodeId = null) {
     statesExplored++;
 
     if (statesExplored >= maxStates) {
@@ -99,8 +136,30 @@ export function solveDFS(
       return null;
     }
 
+    const currentNode = createNode({
+      state,
+      parentId: parentNodeId,
+      depth,
+      searchOrder: statesExplored,
+    });
+
+    emit('expand', {
+      nodeId: currentNode.id,
+      state,
+      parentId: parentNodeId,
+      depth,
+      searchOrder: statesExplored,
+    });
+
     const key = state.join(',');
     if (key === goalKey) {
+      emit('goal', {
+        nodeId: currentNode.id,
+        state,
+        parentId: parentNodeId,
+        depth,
+        searchOrder: statesExplored,
+      });
       return path;
     }
 
@@ -118,6 +177,17 @@ export function solveDFS(
 
       const nextKey = nextState.join(',');
       const nextDepth = depth + 1;
+      const moveDirection = (() => {
+        const blankRow = Math.floor(emptyIndex / gridSize);
+        const blankCol = emptyIndex % gridSize;
+        const targetRow = Math.floor(targetIndex / gridSize);
+        const targetCol = targetIndex % gridSize;
+        if (targetRow === blankRow - 1 && targetCol === blankCol) return 'UP';
+        if (targetRow === blankRow + 1 && targetCol === blankCol) return 'DOWN';
+        if (targetRow === blankRow && targetCol === blankCol - 1) return 'LEFT';
+        if (targetRow === blankRow && targetCol === blankCol + 1) return 'RIGHT';
+        return null;
+      })();
 
       // 1. Active branch cycle check: Do not re-visit states on current call stack
       // 2. Transposition check: Prune if already explored at <= nextDepth
@@ -130,7 +200,23 @@ export function solveDFS(
           pathSet.add(nextKey);
           path.push(nextState);
 
-          const result = dls(nextState, targetIndex, nextDepth, limit, path, pathSet);
+          const childNode = createNode({
+            state: nextState,
+            parentId: currentNode.id,
+            depth: nextDepth,
+            move: moveDirection,
+          });
+
+          emit('generate', {
+            nodeId: childNode.id,
+            parentId: currentNode.id,
+            state: nextState,
+            depth: nextDepth,
+            move: moveDirection,
+            searchOrder: nodesGenerated,
+          });
+
+          const result = dls(nextState, targetIndex, nextDepth, limit, path, pathSet, currentNode.id);
           if (result) return result;
 
           // Backtrack from current branch
@@ -155,7 +241,7 @@ export function solveDFS(
     const pathSet = new Set([initialKey]);
     const path = [initialState];
 
-    const solution = dls(initialState, initialEmptyIndex, 0, limit, path, pathSet);
+    const solution = dls(initialState, initialEmptyIndex, 0, limit, path, pathSet, null);
 
     if (solution) {
       const endTime = performance.now();
@@ -179,6 +265,10 @@ export function solveDFS(
   }
 
   const endTime = performance.now();
+  emit('search_limit', {
+    statesExplored,
+    nodesGenerated,
+  });
   const errorMessage = reachedSafetyLimit
     ? `Search stopped after exploring ${statesExplored.toLocaleString()} states. The puzzle is solvable but requires a deeper search limit or BFS.`
     : `Search depth limit of ${maxDepth} reached without reaching goal state. The puzzle is solvable but requires a deeper search limit or BFS.`;
