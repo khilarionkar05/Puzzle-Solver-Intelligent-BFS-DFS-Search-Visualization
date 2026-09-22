@@ -509,13 +509,7 @@ export default function Solver() {
                 {solverStatus === 'SOLVING' ? '⏸ PAUSE' : solverStatus === 'SOLVED' ? '▶ REPLAY SOLUTION' : '▶ START SOLVER'}
               </Button>
 
-              <Button
-                variant="outline"
-                fullWidth
-                onClick={() => navigate('/tree', { state: { algorithm, puzzleType, gridSize, puzzleState: initialPuzzleState, goalState: getGoalState(gridSize), imageTilesMap, solverStatus, statesExplored, nodesGenerated, executionTime, solutionPath, solutionDepth } })}
-              >
-                🌳 VIEW SEARCH TREE
-              </Button>
+              
 
               <Button
                 variant="outline"
