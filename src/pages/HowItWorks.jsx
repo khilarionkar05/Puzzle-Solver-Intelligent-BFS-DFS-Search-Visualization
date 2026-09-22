@@ -5,200 +5,428 @@ import SectionTitle from '../components/common/SectionTitle';
 import Card from '../components/common/Card';
 import Button from '../components/common/Button';
 import PuzzleBoard from '../components/puzzle/PuzzleBoard';
+import {
+  getGoalState,
+  countInversions,
+  isSolvable,
+  generateSolvableShuffle,
+  moveTile,
+} from '../puzzles/numericalPuzzle.js';
+import {
+  get2DMatrix,
+  calculateStateSpaceCardinality,
+  getValidDirections,
+  applyDirectionalMove,
+  serializeState,
+} from '../utils/puzzleUtils.js';
 import { solveBFS } from '../algorithms/bfs.js';
 import { solveDFS } from '../algorithms/dfs.js';
+import { formatTime, formatNumber } from '../utils/performanceUtils.js';
 
 export default function HowItWorks() {
+  // Grid Configuration State
+  const [gridSize, setGridSize] = useState(3); // 3 | 4
+
+  // Central Interactive Laboratory State
+  const [currentDemoState, setCurrentDemoState] = useState(() => [1, 2, 3, 4, 0, 6, 7, 5, 8]);
+
+  // Algorithm & Workflow Selection States
   const [selectedAlgorithm, setSelectedAlgorithm] = useState('BFS'); // 'BFS' | 'DFS'
   const [activeWorkflowStep, setActiveWorkflowStep] = useState(0);
 
-  // Interactive Demonstration State
-  // A standard solvable 2-move sample puzzle
-  const demoInitialState = [1, 2, 3, 4, 0, 6, 7, 5, 8];
-  const [demoStep, setDemoStep] = useState(0);
-  const [isPlayingDemo, setIsPlayingDemo] = useState(false);
-  const demoTimerRef = useRef(null);
+  // Search Engine Simulation States
+  const [simulationResult, setSimulationResult] = useState(null);
+  const [simulationStep, setSimulationStep] = useState(0);
+  const [isPlayingSim, setIsPlayingSim] = useState(false);
+  const simTimerRef = useRef(null);
 
-  // Workflow step definitions with interactive explanations
-  const workflowSteps = [
-    {
-      num: '01',
-      title: 'Puzzle Setup',
-      shortDesc: 'Initial permutation of numerical or image tiles.',
-      detail: 'The puzzle is initialized with tiles in a solvable shuffled permutation where 0 represents the blank slot.',
-    },
-    {
-      num: '02',
-      title: 'Generate States',
-      shortDesc: 'Identify valid moves by sliding adjacent tiles.',
-      detail: 'From the blank slot (0), adjacent tiles (Up, Down, Left, Right) are identified and swapped to create branch states.',
-    },
-    {
-      num: '03',
-      title: 'BFS / DFS Search',
-      shortDesc: 'Traverse state space tree using Queue or Stack.',
-      detail: 'BFS uses a Queue to explore level-by-level (FIFO). DFS uses a Stack to explore deeply along one branch (LIFO).',
-    },
-    {
-      num: '04',
-      title: 'Find Goal State',
-      shortDesc: 'Check if current state matches target sequence.',
-      detail: 'Each explored state is checked against the target goal [1, 2, 3, 4, 5, 6, 7, 8, 0]. Visited states are tracked in a Set.',
-    },
-    {
-      num: '05',
-      title: 'Reconstruct Solution',
-      shortDesc: 'Trace back parent pointers to render animated moves.',
-      detail: 'Once goal state is reached, parent pointers are traversed backward to construct the exact sequence of puzzle moves.',
-    },
-  ];
-
-  // Pre-computed real solution steps for demonstration
-  const bfsDemoSteps = [
-    {
-      step: 0,
-      name: 'Initial State S0',
-      tiles: [1, 2, 3, 4, 0, 6, 7, 5, 8],
-      action: 'Search begins at root node S0 (Blank at center).',
-      frontier: ['S0 (Root)'],
-      frontierType: 'Queue (FIFO)',
-    },
-    {
-      step: 1,
-      name: 'Explore S0 -> S1',
-      tiles: [1, 2, 3, 4, 5, 6, 7, 0, 8],
-      action: 'Slide tile 5 up into blank slot. Node S1 enqueued.',
-      frontier: ['S1 (Depth 1)', 'S_up', 'S_left', 'S_right'],
-      frontierType: 'Queue (FIFO)',
-    },
-    {
-      step: 2,
-      name: 'Goal Reached S2',
-      tiles: [1, 2, 3, 4, 5, 6, 7, 8, 0],
-      action: 'Slide tile 8 left into blank slot. Goal verified! S2 is target.',
-      frontier: ['S2 (Goal Node)'],
-      frontierType: 'Queue (FIFO)',
-    },
-  ];
-
-  const dfsDemoSteps = [
-    {
-      step: 0,
-      name: 'Initial State S0',
-      tiles: [1, 2, 3, 4, 0, 6, 7, 5, 8],
-      action: 'Push root node S0 onto Stack (LIFO).',
-      frontier: ['[Top] S0 (Root)'],
-      frontierType: 'Stack (LIFO)',
-    },
-    {
-      step: 1,
-      name: 'Deep Branch S0 -> S1',
-      tiles: [1, 2, 3, 4, 5, 6, 7, 0, 8],
-      action: 'Pop S0, push children. Take deepest branch S1.',
-      frontier: ['[Top] S1 (Depth 1)', 'S_alt2', 'S_alt1'],
-      frontierType: 'Stack (LIFO)',
-    },
-    {
-      step: 2,
-      name: 'Goal State S2',
-      tiles: [1, 2, 3, 4, 5, 6, 7, 8, 0],
-      action: 'Pop S1, advance to next branch. Target matched!',
-      frontier: ['[Top] S2 (Goal Node)'],
-      frontierType: 'Stack (LIFO)',
-    },
-  ];
-
-  const currentDemoSteps = selectedAlgorithm === 'BFS' ? bfsDemoSteps : dfsDemoSteps;
-  const currentStepData = currentDemoSteps[Math.min(demoStep, currentDemoSteps.length - 1)];
-
-  // Interactive Playback Timer
+  // Sync state when grid size changes
   useEffect(() => {
-    if (isPlayingDemo) {
-      demoTimerRef.current = setTimeout(() => {
-        setDemoStep((prev) => {
-          if (prev < currentDemoSteps.length - 1) {
+    if (gridSize === 4) {
+      setCurrentDemoState([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 0, 14, 15]);
+    } else {
+      setCurrentDemoState([1, 2, 3, 4, 0, 6, 7, 5, 8]);
+    }
+    setSimulationResult(null);
+    setSimulationStep(0);
+    setIsPlayingSim(false);
+  }, [gridSize]);
+
+  // Re-run simulation when algorithm or demo puzzle state changes
+  useEffect(() => {
+    const goal = getGoalState(gridSize);
+    const solvable = isSolvable(currentDemoState, gridSize);
+
+    if (solvable) {
+      try {
+        let res;
+        if (selectedAlgorithm === 'BFS') {
+          res = solveBFS(currentDemoState, goal, gridSize, 25000);
+        } else {
+          res = solveDFS(currentDemoState, goal, gridSize, 30, 25000);
+        }
+        setSimulationResult(res);
+        setSimulationStep(0);
+        setIsPlayingSim(false);
+      } catch (err) {
+        console.error('Simulation error:', err);
+      }
+    } else {
+      setSimulationResult(null);
+      setSimulationStep(0);
+      setIsPlayingSim(false);
+    }
+  }, [currentDemoState, selectedAlgorithm, gridSize]);
+
+  // Controlled Simulation Playback Timer
+  useEffect(() => {
+    if (isPlayingSim && simulationResult?.solutionPath?.length > 0) {
+      simTimerRef.current = setTimeout(() => {
+        setSimulationStep((prev) => {
+          if (prev < simulationResult.solutionPath.length - 1) {
             return prev + 1;
           } else {
-            setIsPlayingDemo(false);
+            setIsPlayingSim(false);
             return prev;
           }
         });
-      }, 1000);
+      }, 700);
     }
 
     return () => {
-      if (demoTimerRef.current) {
-        clearTimeout(demoTimerRef.current);
-      }
+      if (simTimerRef.current) clearTimeout(simTimerRef.current);
     };
-  }, [isPlayingDemo, demoStep, currentDemoSteps]);
+  }, [isPlayingSim, simulationStep, simulationResult]);
 
-  const handleNextDemo = () => {
-    setIsPlayingDemo(false);
-    if (demoStep < currentDemoSteps.length - 1) {
-      setDemoStep((prev) => prev + 1);
+  // Mathematical Calculations Derived Directly from Central State
+  const matrix2D = get2DMatrix(currentDemoState, gridSize);
+  const serializedState = serializeState(currentDemoState);
+  const emptyIndex = currentDemoState.indexOf(0);
+  const emptyRow = Math.floor(emptyIndex / gridSize);
+  const emptyCol = emptyIndex % gridSize;
+  const validDirs = getValidDirections(emptyIndex, gridSize);
+  const inversions = countInversions(currentDemoState);
+  const parity = inversions % 2 === 0 ? 'EVEN' : 'ODD';
+  const solvable = isSolvable(currentDemoState, gridSize);
+  const cardinality = calculateStateSpaceCardinality(gridSize);
+
+  // Directional move handler
+  const handleDirectionMove = (dir) => {
+    const next = applyDirectionalMove(currentDemoState, dir, gridSize);
+    if (next) {
+      setCurrentDemoState(next);
     }
   };
 
-  const handlePrevDemo = () => {
-    setIsPlayingDemo(false);
-    if (demoStep > 0) {
-      setDemoStep((prev) => prev - 1);
+  // Direct tile click on lab board
+  const handleLabTileClick = (idx) => {
+    const next = moveTile(currentDemoState, idx, gridSize);
+    if (next) {
+      setCurrentDemoState(next);
     }
   };
 
-  const handleTogglePlayDemo = () => {
-    if (demoStep >= currentDemoSteps.length - 1) {
-      setDemoStep(0);
-      setIsPlayingDemo(true);
-    } else {
-      setIsPlayingDemo((prev) => !prev);
-    }
+  // Shuffle laboratory state
+  const handleShuffleLab = () => {
+    const shuffled = generateSolvableShuffle(gridSize, 20);
+    setCurrentDemoState(shuffled);
   };
 
-  const handleResetDemo = () => {
-    if (demoTimerRef.current) clearTimeout(demoTimerRef.current);
-    setIsPlayingDemo(false);
-    setDemoStep(0);
+  // Reset to solved goal state
+  const handleResetGoal = () => {
+    const goal = getGoalState(gridSize);
+    setCurrentDemoState(goal);
   };
+
+  // Invert two tiles to demonstrate an UNSOLVABLE state to students
+  const handleMakeUnsolvable = () => {
+    const goal = getGoalState(gridSize);
+    // Swap 1 and 2 to create odd parity
+    const unsolvable = [...goal];
+    const temp = unsolvable[0];
+    unsolvable[0] = unsolvable[1];
+    unsolvable[1] = temp;
+    setCurrentDemoState(unsolvable);
+  };
+
+  // Workflow definitions
+  const workflowSteps = [
+    {
+      num: '01',
+      title: 'Puzzle State',
+      shortDesc: 'Initial permutation representation.',
+      detail: 'The puzzle is represented as a 1D vector and 2D matrix where 0 denotes the movable empty space.',
+    },
+    {
+      num: '02',
+      title: 'Successor Generation',
+      shortDesc: 'Branching valid directional moves.',
+      detail: 'Transitions occur by sliding adjacent tiles (Up, Down, Left, Right) into the empty slot, producing next state nodes.',
+    },
+    {
+      num: '03',
+      title: 'Frontier Search',
+      shortDesc: 'Queue (BFS) or Stack (DFS) traversal.',
+      detail: 'BFS explores level-by-level with a FIFO queue (optimal). DFS explores deep branch paths with a LIFO stack.',
+    },
+    {
+      num: '04',
+      title: 'Goal Verification',
+      shortDesc: 'Checking target configuration.',
+      detail: 'Each state is tested against target sequence [1..N-1, 0]. Explored states are stored in a Set to prevent cycles.',
+    },
+    {
+      num: '05',
+      title: 'Path Reconstruction',
+      shortDesc: 'Tracing back parent pointers.',
+      detail: 'Once the goal node is located, parent pointers are traversed backward to reconstruct the exact solution sequence.',
+    },
+  ];
+
+  // Simulation board state
+  const simActiveBoard =
+    simulationResult?.solutionPath && simulationResult.solutionPath.length > 0
+      ? simulationResult.solutionPath[simulationStep]
+      : currentDemoState;
+
+  const simTotalSteps = simulationResult?.solutionPath
+    ? simulationResult.solutionPath.length - 1
+    : 0;
+
+  // BFS Pseudocode
+  const bfsPseudocode = `// Breadth-First Search (Queue FIFO)
+function BFS(initialState, goalState):
+    queue = new Queue()
+    visited = new Set()
+    
+    queue.enqueue({ state: initialState, parent: null, depth: 0 })
+    visited.add(serialize(initialState))
+    
+    while not queue.isEmpty():
+        current = queue.dequeue()
+        
+        if current.state == goalState:
+            return reconstructPath(current)
+            
+        for each validMove in getValidMoves(current.state):
+            nextState = applyMove(current.state, validMove)
+            if serialize(nextState) not in visited:
+                visited.add(serialize(nextState))
+                queue.enqueue({ state: nextState, parent: current, depth: current.depth + 1 })
+                
+    return "NO_SOLUTION"`;
+
+  // DFS Pseudocode
+  const dfsPseudocode = `// Depth-First Search (Stack LIFO / Depth-Bounded)
+function DFS(initialState, goalState, maxDepth):
+    stack = new Stack()
+    visitedDepth = new Map()
+    
+    stack.push({ state: initialState, parent: null, depth: 0 })
+    visitedDepth.set(serialize(initialState), 0)
+    
+    while not stack.isEmpty():
+        current = stack.pop()
+        
+        if current.state == goalState:
+            return reconstructPath(current)
+            
+        if current.depth >= maxDepth:
+            continue
+            
+        for each validMove in getValidMoves(current.state):
+            nextState = applyMove(current.state, validMove)
+            nextDepth = current.depth + 1
+            if nextState not visited or nextDepth < visitedDepth.get(nextState):
+                visitedDepth.set(serialize(nextState), nextDepth)
+                stack.push({ state: nextState, parent: current, depth: nextDepth })
+                
+    return "NO_SOLUTION"`;
 
   return (
     <PageContainer>
-      <div style={{ maxWidth: '920px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-8)' }}>
+      <div style={{ maxWidth: '980px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-8)' }}>
+        {/* Header */}
         <SectionTitle
-          tag="DAA Theory & Interactive Demonstration"
+          tag="DAA Algorithm Compendium"
           title="HOW IT WORKS"
-          subtitle="Interactive guide to uninformed state space exploration using BFS and DFS."
+          subtitle="Interactive mathematical foundations and search visualization for sliding tile puzzles."
         />
 
-        {/* Algorithm Selector Switcher */}
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <div style={{ display: 'inline-flex', gap: 'var(--space-2)', backgroundColor: 'var(--color-surface)', padding: '6px', border: 'var(--border-width) solid var(--color-border)', borderRadius: 'var(--border-radius)', boxShadow: 'var(--box-shadow-sm)' }}>
-            <Button
-              variant={selectedAlgorithm === 'BFS' ? 'primary' : 'outline'}
-              size="md"
-              onClick={() => {
-                setSelectedAlgorithm('BFS');
-                handleResetDemo();
-              }}
-            >
-              🌊 Breadth-First Search (BFS)
-            </Button>
-            <Button
-              variant={selectedAlgorithm === 'DFS' ? 'secondary' : 'outline'}
-              size="md"
-              onClick={() => {
-                setSelectedAlgorithm('DFS');
-                handleResetDemo();
-              }}
-            >
-              🌲 Depth-First Search (DFS)
-            </Button>
-          </div>
-        </div>
+        {/* ============================================================ */}
+        {/* SECTION 1: INTERACTIVE STATE SPACE LABORATORY */}
+        {/* ============================================================ */}
+        <Card title="1. INTERACTIVE STATE REPRESENTATION LABORATORY" icon="🔬">
+          <p style={{ fontSize: '0.9rem', marginBottom: 'var(--space-4)', color: 'var(--color-text-muted)' }}>
+            Interact with the board below to see real-time updates across 2D matrix notation, 1D vector mapping, legal operators, inversion parity, and solvability.
+          </p>
 
-        {/* Interactive Workflow Diagram */}
-        <Card title="SEARCH & SOLVING WORKFLOW (CLICK STEPS TO EXPLORE)" icon="🔄">
+          {/* Grid Size Switcher */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 'var(--space-3)', marginBottom: 'var(--space-5)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>GRID SIZE:</span>
+              <Button
+                variant={gridSize === 3 ? 'primary' : 'outline'}
+                size="sm"
+                onClick={() => setGridSize(3)}
+              >
+                3 × 3 (8-Puzzle)
+              </Button>
+              <Button
+                variant={gridSize === 4 ? 'primary' : 'outline'}
+                size="sm"
+                onClick={() => setGridSize(4)}
+              >
+                4 × 4 (15-Puzzle)
+              </Button>
+            </div>
+
+            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+              <Button variant="outline" size="sm" onClick={handleShuffleLab}>
+                🎲 Solvable Shuffle
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleResetGoal}>
+                🔄 Goal State
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleMakeUnsolvable} title="Swap 2 tiles to show an unsolvable parity">
+                ⚠️ Make Unsolvable
+              </Button>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--space-6)', alignItems: 'start' }}>
+            {/* Interactive Board & D-Pad */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)' }}>
+              <div style={{ width: '100%', maxWidth: gridSize === 4 ? '320px' : '260px' }}>
+                <PuzzleBoard
+                  tiles={currentDemoState}
+                  gridSize={gridSize}
+                  onTileClick={handleLabTileClick}
+                />
+              </div>
+
+              {/* D-Pad Directional Move Operators */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', marginTop: 'var(--space-2)' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: 'var(--color-text-subtle)' }}>
+                  BLANK SLIDE OPERATORS
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDirectionMove('UP')}
+                  disabled={!validDirs.UP}
+                  style={{ width: '70px' }}
+                >
+                  ↑ UP
+                </Button>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDirectionMove('LEFT')}
+                    disabled={!validDirs.LEFT}
+                    style={{ width: '70px' }}
+                  >
+                    ← LEFT
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDirectionMove('DOWN')}
+                    disabled={!validDirs.DOWN}
+                    style={{ width: '70px' }}
+                  >
+                    ↓ DOWN
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDirectionMove('RIGHT')}
+                    disabled={!validDirs.RIGHT}
+                    style={{ width: '70px' }}
+                  >
+                    → RIGHT
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Live Data Representations */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+              {/* 2D Matrix M[r][c] */}
+              <div style={{ backgroundColor: 'var(--color-surface-alt)', border: 'var(--border-width) solid var(--color-border)', borderRadius: 'var(--border-radius)', padding: 'var(--space-3)' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 800, marginBottom: 'var(--space-2)' }}>
+                  2D MATRIX NOTATION M[r][c]
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  {matrix2D.map((row, rIdx) => (
+                    <div key={rIdx} style={{ display: 'flex', gap: '8px' }}>
+                      <span style={{ color: 'var(--color-text-subtle)', width: '45px' }}>r={rIdx}:</span>
+                      <span>[ {row.map((v) => (v === 0 ? '·' : v)).join(' , ')} ]</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 1D Vector & Formula */}
+              <div style={{ backgroundColor: 'var(--color-surface-alt)', border: 'var(--border-width) solid var(--color-border)', borderRadius: 'var(--border-radius)', padding: 'var(--space-3)' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 800, marginBottom: 'var(--space-1)' }}>
+                  1D VECTOR & STATE KEY
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', wordBreak: 'break-all', marginBottom: 'var(--space-1)' }}>
+                  Vector: <strong>[ {currentDemoState.join(', ')} ]</strong>
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                  Serialized Key: <code>"{serializedState}"</code>
+                </div>
+                <div style={{ marginTop: 'var(--space-2)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-subtle)' }}>
+                  Mapping Formula: <code>index = r × {gridSize} + c</code> | Blank at (r={emptyRow}, c={emptyCol})
+                </div>
+              </div>
+
+              {/* Solvability & Inversion Parity */}
+              <div style={{ 
+                backgroundColor: solvable ? '#ECFDF5' : '#FEF2F2', 
+                border: 'var(--border-width) solid var(--color-border)', 
+                borderRadius: 'var(--border-radius)', 
+                padding: 'var(--space-3)' 
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-1)' }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 800 }}>INVERSION PARITY & SOLVABILITY:</span>
+                  <span className={`badge ${solvable ? 'badge-green' : 'badge-yellow'}`}>
+                    {solvable ? 'SOLVABLE ✓' : 'UNSOLVABLE ✗'}
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.85rem', lineHeight: '1.4' }}>
+                  <span>Inversions: <strong>{inversions}</strong> ({parity})</span>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                    {gridSize === 3
+                      ? 'Rule: 3×3 puzzle is solvable if and only if total inversions are EVEN.'
+                      : `Rule: 4×4 puzzle is solvable if (inversions + blank row from bottom) is ODD. Blank row from bottom = ${gridSize - emptyRow}.`}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* State Space Cardinality */}
+          <div style={{ 
+            marginTop: 'var(--space-5)', 
+            padding: 'var(--space-3) var(--space-4)', 
+            backgroundColor: '#FEF3C7', 
+            border: 'var(--border-width) solid var(--color-border)', 
+            borderRadius: 'var(--border-radius)',
+            fontSize: '0.85rem'
+          }}>
+            <strong>State Space Cardinality ({gridSize}×{gridSize}):</strong> Total Permutations = <code>{gridSize * gridSize}!</code> ({cardinality.totalPermutations}). 
+            Because inversion parity divides state space into two equal disjoint subgraphs, exactly <strong>50%</strong> (<code>{cardinality.reachableStates} states</code>) are reachable from the goal!
+          </div>
+        </Card>
+
+        {/* ============================================================ */}
+        {/* SECTION 2: INTERACTIVE SEARCH & SOLVING WORKFLOW */}
+        {/* ============================================================ */}
+        <Card title="2. SEARCH & SOLVING WORKFLOW (CLICK STEPS TO EXPLORE)" icon="🔄">
           <div style={{ 
             display: 'grid', 
             gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', 
@@ -242,7 +470,6 @@ export default function HowItWorks() {
             })}
           </div>
 
-          {/* Active Step Detailed Description Banner */}
           <div style={{ 
             marginTop: 'var(--space-4)', 
             padding: 'var(--space-3) var(--space-4)', 
@@ -257,150 +484,151 @@ export default function HowItWorks() {
           </div>
         </Card>
 
-        {/* Live Interactive State-by-State Demonstration Arena */}
-        <Card title={`INTERACTIVE ${selectedAlgorithm} STATE TRANSITION DEMO`} icon="🎮">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--space-6)', alignItems: 'center' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-4)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '340px' }}>
-                <span className="badge badge-yellow" style={{ fontSize: '0.8rem' }}>
-                  {currentStepData.name}
-                </span>
-                <span className="stat-pill" style={{ fontSize: '0.8rem' }}>
-                  STEP {demoStep} / {currentDemoSteps.length - 1}
-                </span>
-              </div>
-
-              {/* Real Puzzle Board Display */}
-              <div style={{ width: '100%', maxWidth: '320px' }}>
-                <PuzzleBoard tiles={currentStepData.tiles} gridSize={3} />
-              </div>
-
-              {/* Step Action Explanation */}
-              <div className="instruction-box" style={{ width: '100%', maxWidth: '440px' }}>
-                <span>💡</span>
-                <span>{currentStepData.action}</span>
-              </div>
-
-              {/* Dynamic Queue / Stack Frontier Representation */}
-              <div style={{ 
-                width: '100%', 
-                maxWidth: '440px',
-                backgroundColor: 'var(--color-surface-alt)', 
-                border: 'var(--border-width) solid var(--color-border)', 
-                borderRadius: 'var(--border-radius)', 
-                padding: 'var(--space-3)' 
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-2)', fontSize: '0.8rem', fontWeight: 800 }}>
-                  <span>ACTIVE FRONTIER DATA STRUCTURE:</span>
-                  <span className="badge badge-cyan">{currentStepData.frontierType}</span>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {currentStepData.frontier.map((item, idx) => (
-                    <span 
-                      key={idx} 
-                      style={{ 
-                        backgroundColor: idx === 0 ? 'var(--color-secondary)' : '#fff', 
-                        border: '1.5px solid var(--color-border)', 
-                        borderRadius: '4px', 
-                        padding: '2px 8px', 
-                        fontSize: '0.75rem', 
-                        fontWeight: 700, 
-                        fontFamily: 'var(--font-mono)' 
-                      }}
-                    >
-                      {item}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Step Controls */}
-              <div style={{ display: 'flex', gap: 'var(--space-2)', width: '100%', maxWidth: '440px' }}>
-                <Button 
-                  variant="outline" 
-                  size="md" 
-                  onClick={handlePrevDemo} 
-                  disabled={demoStep === 0 || isPlayingDemo}
-                  style={{ flex: 1 }}
-                >
-                  ◀ PREV
-                </Button>
-                <Button 
-                  variant={isPlayingDemo ? 'secondary' : 'primary'} 
-                  size="md" 
-                  onClick={handleTogglePlayDemo}
-                  style={{ flex: 1.2 }}
-                >
-                  {isPlayingDemo ? '⏸ PAUSE' : demoStep >= currentDemoSteps.length - 1 ? '🔄 REPLAY' : '▶ AUTO PLAY'}
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="md" 
-                  onClick={handleNextDemo} 
-                  disabled={demoStep >= currentDemoSteps.length - 1 || isPlayingDemo}
-                  style={{ flex: 1 }}
-                >
-                  NEXT ▶
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="md" 
-                  onClick={handleResetDemo}
-                >
-                  🔄
-                </Button>
-              </div>
+        {/* ============================================================ */}
+        {/* SECTION 3: REAL BFS & DFS STATE TRANSITION DEMONSTRATION */}
+        {/* ============================================================ */}
+        <Card title={`3. LIVE ${selectedAlgorithm} SEARCH & FRONTIER DEMONSTRATION`} icon="⚡">
+          {/* Switcher */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'var(--space-4)' }}>
+            <div style={{ display: 'inline-flex', gap: 'var(--space-2)', backgroundColor: 'var(--color-surface)', padding: '6px', border: 'var(--border-width) solid var(--color-border)', borderRadius: 'var(--border-radius)', boxShadow: 'var(--box-shadow-sm)' }}>
+              <Button
+                variant={selectedAlgorithm === 'BFS' ? 'primary' : 'outline'}
+                size="md"
+                onClick={() => setSelectedAlgorithm('BFS')}
+              >
+                🌊 Breadth-First Search (Queue FIFO)
+              </Button>
+              <Button
+                variant={selectedAlgorithm === 'DFS' ? 'secondary' : 'outline'}
+                size="md"
+                onClick={() => setSelectedAlgorithm('DFS')}
+              >
+                🌲 Depth-First Search (Stack LIFO)
+              </Button>
             </div>
           </div>
+
+          {!solvable ? (
+            <div className="puzzle-alert puzzle-alert-warning" style={{ textAlign: 'center', justifyContent: 'center' }}>
+              <span>⚠️ The current board permutation is mathematically unsolvable. Click "Solvable Shuffle" above to run search demonstration.</span>
+            </div>
+          ) : !simulationResult?.solved ? (
+            <div className="puzzle-alert puzzle-alert-warning" style={{ textAlign: 'center', justifyContent: 'center' }}>
+              <span>⚠️ Search depth limit reached without finding goal. Try a shallower permutation or switch to BFS.</span>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--space-6)', alignItems: 'center' }}>
+              {/* Simulation Board & Steps */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-3)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '300px' }}>
+                  <span className="badge badge-yellow">
+                    {simulationStep === 0 ? 'Start State' : simulationStep === simTotalSteps ? 'Goal State' : `Step ${simulationStep}`}
+                  </span>
+                  <span className="stat-pill" style={{ fontSize: '0.8rem' }}>
+                    STEP {simulationStep} / {simTotalSteps}
+                  </span>
+                </div>
+
+                <div style={{ width: '100%', maxWidth: gridSize === 4 ? '320px' : '280px' }}>
+                  <PuzzleBoard tiles={simActiveBoard} gridSize={gridSize} />
+                </div>
+
+                {/* Simulation Step Controls */}
+                <div style={{ display: 'flex', gap: 'var(--space-2)', width: '100%', maxWidth: '360px' }}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setIsPlayingSim(false);
+                      if (simulationStep > 0) setSimulationStep((p) => p - 1);
+                    }}
+                    disabled={simulationStep === 0 || isPlayingSim}
+                    style={{ flex: 1 }}
+                  >
+                    ◀ PREV
+                  </Button>
+                  <Button
+                    variant={isPlayingSim ? 'secondary' : 'primary'}
+                    size="sm"
+                    onClick={() => {
+                      if (simulationStep >= simTotalSteps) {
+                        setSimulationStep(0);
+                        setIsPlayingSim(true);
+                      } else {
+                        setIsPlayingSim((p) => !p);
+                      }
+                    }}
+                    style={{ flex: 1.2 }}
+                  >
+                    {isPlayingSim ? '⏸ PAUSE' : simulationStep >= simTotalSteps ? '🔄 REPLAY' : '▶ AUTO PLAY'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setIsPlayingSim(false);
+                      if (simulationStep < simTotalSteps) setSimulationStep((p) => p + 1);
+                    }}
+                    disabled={simulationStep >= simTotalSteps || isPlayingSim}
+                    style={{ flex: 1 }}
+                  >
+                    NEXT ▶
+                  </Button>
+                </div>
+              </div>
+
+              {/* Data Structure Frontier & Visited Information */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                <div style={{ backgroundColor: 'var(--color-surface-alt)', border: 'var(--border-width) solid var(--color-border)', borderRadius: 'var(--border-radius)', padding: 'var(--space-3)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 800 }}>
+                      {selectedAlgorithm === 'BFS' ? 'QUEUE (FIFO) FRONTIER:' : 'STACK (LIFO) FRONTIER:'}
+                    </span>
+                    <span className="badge badge-cyan" style={{ fontSize: '0.7rem' }}>
+                      {selectedAlgorithm === 'BFS' ? 'First In, First Out' : 'Last In, First Out'}
+                    </span>
+                  </div>
+
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--color-text)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {selectedAlgorithm === 'BFS' ? (
+                      <div>
+                        <code>Front → [S_{simulationStep}] ... [S_{Math.min(simulationStep + 3, simTotalSteps)}] ← Rear</code>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                          Nodes are dequeued from the front and child states are appended to the rear, guaranteeing level-by-level search.
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <code>Top ↓ [S_{simulationStep}] → [S_{Math.max(0, simulationStep - 1)}] → Base</code>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                          Nodes are pushed and popped from the top of the stack, diving into deep branches before backtracking.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Real Search Engine Measured Metrics */}
+                <div style={{ backgroundColor: 'var(--color-surface-alt)', border: 'var(--border-width) solid var(--color-border)', borderRadius: 'var(--border-radius)', padding: 'var(--space-3)' }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 800, marginBottom: 'var(--space-2)' }}>
+                    REAL SOLVER ENGINE EXECUTION METRICS:
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--space-2)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+                    <div>States Explored: <strong>{formatNumber(simulationResult.statesExplored)}</strong></div>
+                    <div>Nodes Generated: <strong>{formatNumber(simulationResult.nodesGenerated)}</strong></div>
+                    <div>Solution Depth: <strong>{simulationResult.solutionDepth} moves</strong></div>
+                    <div>Execution Time: <strong>{formatTime(simulationResult.executionTime)}</strong></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </Card>
 
-        {/* BFS vs DFS Strategy Comparison Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--space-4)' }}>
-          <Card 
-            title="BREADTH-FIRST SEARCH (BFS)" 
-            icon="🌊"
-            style={{
-              borderColor: selectedAlgorithm === 'BFS' ? 'var(--color-border)' : 'rgba(0,0,0,0.3)',
-              backgroundColor: selectedAlgorithm === 'BFS' ? '#FFFFFF' : 'var(--color-surface-alt)',
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-              <span className="badge badge-cyan" style={{ alignSelf: 'flex-start' }}>Queue (FIFO)</span>
-              <p style={{ fontSize: '0.95rem' }}>
-                Explores all neighboring nodes at the present depth level before moving on to nodes at the next depth level.
-              </p>
-              <ul style={{ paddingLeft: '1.25rem', fontSize: '0.9rem', color: 'var(--color-text-muted)', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                <li><strong>Completeness:</strong> Complete (always finds goal if branching is finite).</li>
-                <li><strong>Optimality:</strong> Guaranteed to find the shortest path of moves.</li>
-                <li><strong>Memory:</strong> High space requirement (<code>O(b^d)</code>).</li>
-              </ul>
-            </div>
-          </Card>
-
-          <Card 
-            title="DEPTH-FIRST SEARCH (DFS)" 
-            icon="🌲"
-            style={{
-              borderColor: selectedAlgorithm === 'DFS' ? 'var(--color-border)' : 'rgba(0,0,0,0.3)',
-              backgroundColor: selectedAlgorithm === 'DFS' ? '#FFFFFF' : 'var(--color-surface-alt)',
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-              <span className="badge badge-yellow" style={{ alignSelf: 'flex-start' }}>Stack (LIFO)</span>
-              <p style={{ fontSize: '0.95rem' }}>
-                Explores as far as possible along each branch before backtracking to previous unexplored decision points.
-              </p>
-              <ul style={{ paddingLeft: '1.25rem', fontSize: '0.9rem', color: 'var(--color-text-muted)', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                <li><strong>Completeness:</strong> Incomplete in infinite spaces without depth limit.</li>
-                <li><strong>Optimality:</strong> Non-optimal (path may be excessively long).</li>
-                <li><strong>Memory:</strong> Low space requirement (<code>O(b · m)</code>).</li>
-              </ul>
-            </div>
-          </Card>
-        </div>
-
-        {/* Complexity Analysis Section */}
-        <Card title="TIME & SPACE COMPLEXITY ANALYSIS" icon="📐">
+        {/* ============================================================ */}
+        {/* SECTION 4: TIME & SPACE COMPLEXITY MATRIX */}
+        {/* ============================================================ */}
+        <Card title="4. TIME & SPACE COMPLEXITY ANALYSIS" icon="📐">
           <div className="comparison-table-wrapper">
             <table className="comparison-table">
               <thead>
@@ -414,18 +642,18 @@ export default function HowItWorks() {
               </thead>
               <tbody>
                 <tr style={{ backgroundColor: selectedAlgorithm === 'BFS' ? '#E0F2FE' : 'transparent' }}>
-                  <td><strong>BFS</strong></td>
+                  <td><strong>BFS (Breadth-First)</strong></td>
                   <td><code>O(b<sup>d</sup>)</code></td>
                   <td><code>O(b<sup>d</sup>)</code></td>
                   <td>Queue (FIFO)</td>
                   <td>Guaranteed Shortest</td>
                 </tr>
                 <tr style={{ backgroundColor: selectedAlgorithm === 'DFS' ? '#FEF3C7' : 'transparent' }}>
-                  <td><strong>DFS</strong></td>
+                  <td><strong>DFS (Depth-First)</strong></td>
                   <td><code>O(b<sup>m</sup>)</code></td>
                   <td><code>O(b · m)</code></td>
                   <td>Stack (LIFO)</td>
-                  <td>Non-Optimal</td>
+                  <td>Non-Optimal (Branch Deep)</td>
                 </tr>
               </tbody>
             </table>
@@ -439,20 +667,46 @@ export default function HowItWorks() {
             padding: 'var(--space-3)',
             fontSize: '0.875rem'
           }}>
-            <h4 style={{ fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: 'var(--space-1)' }}>Notation Guide:</h4>
+            <h4 style={{ fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: 'var(--space-1)' }}>DAA Notation Definitions:</h4>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-4)', fontFamily: 'var(--font-mono)' }}>
-              <span><strong>b</strong> = branching factor (~2 to 4 moves per state)</span>
-              <span><strong>d</strong> = shallowest solution depth</span>
-              <span><strong>m</strong> = maximum search tree depth</span>
+              <span><strong>b</strong> = Effective branching factor (~2 to 4 moves per state)</span>
+              <span><strong>d</strong> = Shallowest goal solution depth</span>
+              <span><strong>m</strong> = Maximum search tree depth</span>
             </div>
           </div>
         </Card>
 
-        {/* Bottom CTA */}
-        <div style={{ textAlign: 'center' }}>
+        {/* ============================================================ */}
+        {/* SECTION 5: ALGORITHM PSEUDOCODE COMPENDIUM */}
+        {/* ============================================================ */}
+        <Card title={`5. ${selectedAlgorithm} PSEUDOCODE SPECIFICATION`} icon="💻">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-2)' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 700 }}>
+              {selectedAlgorithm === 'BFS' ? 'Queue-Based Breadth-First Search Algorithm' : 'Stack-Based Depth-First Search Algorithm'}
+            </span>
+            <span className="badge badge-yellow">{selectedAlgorithm} Algorithm</span>
+          </div>
+          <pre style={{ 
+            backgroundColor: '#1E293B', 
+            color: '#F8FAFC', 
+            padding: 'var(--space-4)', 
+            borderRadius: 'var(--border-radius)', 
+            overflowX: 'auto',
+            fontSize: '0.8rem',
+            lineHeight: '1.5',
+            border: 'var(--border-width) solid var(--color-border)'
+          }}>
+            <code>{selectedAlgorithm === 'BFS' ? bfsPseudocode : dfsPseudocode}</code>
+          </pre>
+        </Card>
+
+        {/* ============================================================ */}
+        {/* SECTION 6: BOTTOM LAUNCH CTA */}
+        {/* ============================================================ */}
+        <div style={{ textAlign: 'center', margin: 'var(--space-4) 0' }}>
           <Link to="/puzzle">
             <Button variant="primary" size="lg">
-              🚀 Try The Puzzle Solver Now
+              🚀 Launch Live Puzzle Solver Arena
             </Button>
           </Link>
         </div>

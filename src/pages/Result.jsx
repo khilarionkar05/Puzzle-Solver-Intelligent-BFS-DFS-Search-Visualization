@@ -74,6 +74,7 @@ export default function Result() {
     nodesGenerated = 0,
     executionTime = 0,
     solved = false,
+    terminationReason = 'search_limit',
     imageTilesMap = null,
   } = resultData;
 
@@ -138,17 +139,17 @@ export default function Result() {
     ? {
         states: formatNumber(comparisonData.bfs.statesExplored),
         nodes: formatNumber(comparisonData.bfs.nodesGenerated),
-        moves: comparisonData.bfs.solved ? comparisonData.bfs.solutionDepth : 'No Solution',
+        moves: comparisonData.bfs.solved ? comparisonData.bfs.solutionDepth : comparisonData.bfs.terminationReason === 'search_limit' ? 'Search Limit' : 'No Solution',
         time: formatTime(comparisonData.bfs.executionTime),
-        status: comparisonData.bfs.solved ? 'Solved ✓' : 'Exhausted ✗',
+        status: comparisonData.bfs.solved ? 'Solved ✓' : comparisonData.bfs.terminationReason === 'search_limit' ? 'Search Limit ✗' : 'Unsolvable ✗',
       }
     : normalizedAlgo === 'BFS'
     ? {
         states: formatNumber(statesExplored),
         nodes: formatNumber(nodesGenerated),
-        moves: solved ? movesCount : 'No Solution',
+        moves: solved ? movesCount : terminationReason === 'search_limit' ? 'Search Limit' : 'No Solution',
         time: formatTime(executionTime),
-        status: solved ? 'Solved ✓' : 'Exhausted ✗',
+        status: solved ? 'Solved ✓' : terminationReason === 'search_limit' ? 'Search Limit ✗' : 'Unsolvable ✗',
       }
     : {
         states: 'Not Run',
@@ -162,17 +163,17 @@ export default function Result() {
     ? {
         states: formatNumber(comparisonData.dfs.statesExplored),
         nodes: formatNumber(comparisonData.dfs.nodesGenerated),
-        moves: comparisonData.dfs.solved ? comparisonData.dfs.solutionDepth : 'Depth Limit Exceeded',
+        moves: comparisonData.dfs.solved ? comparisonData.dfs.solutionDepth : comparisonData.dfs.terminationReason === 'search_limit' ? 'Search Limit' : 'No Solution',
         time: formatTime(comparisonData.dfs.executionTime),
-        status: comparisonData.dfs.solved ? 'Solved ✓' : 'Depth Exceeded ✗',
+        status: comparisonData.dfs.solved ? 'Solved ✓' : comparisonData.dfs.terminationReason === 'search_limit' ? 'Search Limit ✗' : 'Unsolvable ✗',
       }
     : normalizedAlgo === 'DFS'
     ? {
         states: formatNumber(statesExplored),
         nodes: formatNumber(nodesGenerated),
-        moves: solved ? movesCount : 'Depth Limit Exceeded',
+        moves: solved ? movesCount : terminationReason === 'search_limit' ? 'Search Limit' : 'No Solution',
         time: formatTime(executionTime),
-        status: solved ? 'Solved ✓' : 'Exhausted ✗',
+        status: solved ? 'Solved ✓' : terminationReason === 'search_limit' ? 'Search Limit ✗' : 'Unsolvable ✗',
       }
     : {
         states: 'Not Run',
@@ -209,9 +210,13 @@ export default function Result() {
               <>
                 PUZZLE SOLVED <span style={{ color: 'var(--color-success)' }}>✓</span>
               </>
+            ) : terminationReason === 'search_limit' ? (
+              <>
+                SEARCH LIMIT REACHED <span style={{ color: 'var(--color-warning)' }}>⚠</span>
+              </>
             ) : (
               <>
-                NO SOLUTION FOUND <span style={{ color: 'var(--color-danger)' }}>✗</span>
+                UNSOLVABLE <span style={{ color: 'var(--color-danger)' }}>✗</span>
               </>
             )}
           </h1>

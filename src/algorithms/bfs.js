@@ -7,59 +7,73 @@
  */
 import { getGoalState, getValidMoveIndices, isSolvable } from '../puzzles/numericalPuzzle.js';
 
+export const MAX_STATES = 5000000;
+
 /**
  * Executes Breadth-First Search to find the shortest path from initial to goal state.
  * @param {Array<number>} initialState
  * @param {Array<number>} [customGoalState]
  * @param {number} [gridSize=3]
- * @param {number} [maxStates=150000]
+ * @param {number} [maxStates=1000000]
  * @returns {{
  *   solved: boolean,
+ *   terminationReason: 'solved' | 'unsolvable' | 'search_limit',
+ *   algorithm: 'BFS',
+ *   initialState: Array<number>,
+ *   finalState: Array<number>,
  *   solutionPath: Array<Array<number>>,
+ *   solutionDepth: number,
  *   statesExplored: number,
  *   nodesGenerated: number,
- *   solutionDepth: number,
  *   executionTime: number,
  *   error?: string
  * }}
  */
-export function solveBFS(initialState, customGoalState = null, gridSize = 3, maxStates = 150000) {
+export function solveBFS(initialState, customGoalState = null, gridSize = 3, maxStates = MAX_STATES) {
   const startTime = performance.now();
 
   const goalState = customGoalState || getGoalState(gridSize);
   const goalKey = goalState.join(',');
   const initialKey = initialState.join(',');
 
-  // Solvability check
+  // 1. Mathematical Solvability Verification BEFORE search
   if (!isSolvable(initialState, gridSize)) {
     const endTime = performance.now();
     return {
       solved: false,
+      terminationReason: 'unsolvable',
+      algorithm: 'BFS',
+      initialState,
+      finalState: initialState,
       solutionPath: [],
+      solutionDepth: 0,
       statesExplored: 0,
       nodesGenerated: 0,
-      solutionDepth: 0,
       executionTime: Number((endTime - startTime).toFixed(2)),
       error: 'The puzzle configuration is mathematically unsolvable.',
     };
   }
 
-  // If already at goal state
+  // 2. Trivial Goal Check (0 moves)
   if (initialKey === goalKey) {
     const endTime = performance.now();
     return {
       solved: true,
+      terminationReason: 'solved',
+      algorithm: 'BFS',
+      initialState,
+      finalState: initialState,
       solutionPath: [initialState],
+      solutionDepth: 0,
       statesExplored: 1,
       nodesGenerated: 1,
-      solutionDepth: 0,
       executionTime: Number((endTime - startTime).toFixed(2)),
     };
   }
 
   const initialEmptyIndex = initialState.indexOf(0);
 
-  // FIFO Queue with pointer index to avoid O(N) Array.shift() overhead
+  // FIFO Queue with head pointer index to avoid O(N) Array.shift() overhead
   const queue = [
     {
       state: initialState,
@@ -94,10 +108,14 @@ export function solveBFS(initialState, customGoalState = null, gridSize = 3, max
       const endTime = performance.now();
       return {
         solved: true,
+        terminationReason: 'solved',
+        algorithm: 'BFS',
+        initialState,
+        finalState: path[path.length - 1],
         solutionPath: path,
+        solutionDepth: path.length - 1,
         statesExplored,
         nodesGenerated,
-        solutionDepth: path.length - 1,
         executionTime: Number((endTime - startTime).toFixed(2)),
       };
     }
@@ -110,7 +128,6 @@ export function solveBFS(initialState, customGoalState = null, gridSize = 3, max
 
     for (let i = 0; i < validMoves.length; i++) {
       const targetIndex = validMoves[i];
-      // Fast swap without full array copy overhead until necessary
       const nextState = [...current.state];
       nextState[current.emptyIndex] = nextState[targetIndex];
       nextState[targetIndex] = 0;
@@ -133,12 +150,16 @@ export function solveBFS(initialState, customGoalState = null, gridSize = 3, max
   const endTime = performance.now();
   return {
     solved: false,
+    terminationReason: 'search_limit',
+    algorithm: 'BFS',
+    initialState,
+    finalState: initialState,
     solutionPath: [],
+    solutionDepth: 0,
     statesExplored,
     nodesGenerated,
-    solutionDepth: 0,
     executionTime: Number((endTime - startTime).toFixed(2)),
-    error: 'Maximum search state limit reached without reaching goal.',
+    error: `Search stopped after exploring ${statesExplored.toLocaleString()} states without reaching goal.`,
   };
 }
 

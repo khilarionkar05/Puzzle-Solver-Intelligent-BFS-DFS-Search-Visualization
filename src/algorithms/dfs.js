@@ -1,25 +1,32 @@
 /**
- * Depth-First Search (DFS) Solver Module
+ * Depth-First Search (DFS / Iterative Deepening IDDFS) Solver Module
  * Mini-Project for Design and Analysis of Algorithms (DAA)
  *
- * Traverses puzzle state space deeply along branches using a LIFO Stack.
- * Implements depth-limited / iterative deepening exploration to prevent infinite branches.
+ * Traverses puzzle state space branches using Depth-First Search with path-based
+ * cycle prevention and transposition-aware Iterative Deepening to prevent infinite
+ * branch traps without incorrectly locking out valid alternative paths.
  */
 import { getGoalState, getValidMoveIndices, isSolvable } from '../puzzles/numericalPuzzle.js';
 
+export const MAX_STATES = 5000000;
+
 /**
- * Executes Depth-First Search (DFS / Depth-Limited Stack) to find a path to the goal state.
+ * Executes Iterative Deepening Depth-First Search (IDDFS / Depth-Bounded Stack Search).
  * @param {Array<number>} initialState
  * @param {Array<number>} [customGoalState]
  * @param {number} [gridSize=3]
- * @param {number} [maxDepth=30]
- * @param {number} [maxStates=150000]
+ * @param {number} [maxDepth=26] - Maximum search depth limit
+ * @param {number} [maxStates=1000000] - Safety ceiling on explored states
  * @returns {{
  *   solved: boolean,
+ *   terminationReason: 'solved' | 'unsolvable' | 'search_limit',
+ *   algorithm: 'DFS',
+ *   initialState: Array<number>,
+ *   finalState: Array<number>,
  *   solutionPath: Array<Array<number>>,
+ *   solutionDepth: number,
  *   statesExplored: number,
  *   nodesGenerated: number,
- *   solutionDepth: number,
  *   executionTime: number,
  *   error?: string
  * }}
@@ -28,8 +35,8 @@ export function solveDFS(
   initialState,
   customGoalState = null,
   gridSize = 3,
-  maxDepth = 35,
-  maxStates = 150000
+  maxDepth = 26,
+  maxStates = MAX_STATES
 ) {
   const startTime = performance.now();
 
@@ -37,123 +44,157 @@ export function solveDFS(
   const goalKey = goalState.join(',');
   const initialKey = initialState.join(',');
 
-  // Solvability check
+  // 1. Mathematical Solvability Verification BEFORE search
   if (!isSolvable(initialState, gridSize)) {
     const endTime = performance.now();
     return {
       solved: false,
+      terminationReason: 'unsolvable',
+      algorithm: 'DFS',
+      initialState,
+      finalState: initialState,
       solutionPath: [],
+      solutionDepth: 0,
       statesExplored: 0,
       nodesGenerated: 0,
-      solutionDepth: 0,
       executionTime: Number((endTime - startTime).toFixed(2)),
       error: 'The puzzle configuration is mathematically unsolvable.',
     };
   }
 
-  // If already at goal state
+  // 2. Trivial Goal Check (0 moves required)
   if (initialKey === goalKey) {
     const endTime = performance.now();
     return {
       solved: true,
+      terminationReason: 'solved',
+      algorithm: 'DFS',
+      initialState,
+      finalState: initialState,
       solutionPath: [initialState],
+      solutionDepth: 0,
       statesExplored: 1,
       nodesGenerated: 1,
-      solutionDepth: 0,
       executionTime: Number((endTime - startTime).toFixed(2)),
     };
   }
 
-  const initialEmptyIndex = initialState.indexOf(0);
-
-  // LIFO Stack for Depth-First Search
-  const stack = [
-    {
-      state: initialState,
-      emptyIndex: initialEmptyIndex,
-      parent: null,
-      depth: 0,
-    },
-  ];
-
-  // Map state string -> minimum depth encountered to prune suboptimal deeper visits
-  const visitedDepth = new Map();
-  visitedDepth.set(initialKey, 0);
-
   let statesExplored = 0;
   let nodesGenerated = 1;
+  let reachedSafetyLimit = false;
 
-  while (stack.length > 0) {
-    const current = stack.pop();
+  // Transposition table mapping state string -> minimum depth encountered in current iteration
+  const visitedMinDepth = new Map();
+
+  /**
+   * Recursive Depth-Limited Search (DLS)
+   * Prevents cycles on the active call stack path while pruning states
+   * already encountered at an equal or shallower depth in the current limit iteration.
+   */
+  function dls(state, emptyIndex, depth, limit, path, pathSet) {
     statesExplored++;
 
-    // Check goal condition
-    if (current.state.join(',') === goalKey) {
-      const path = [];
-      let curr = current;
-      while (curr !== null) {
-        path.push(curr.state);
-        curr = curr.parent;
-      }
-      path.reverse();
+    if (statesExplored >= maxStates) {
+      reachedSafetyLimit = true;
+      return null;
+    }
 
+    const key = state.join(',');
+    if (key === goalKey) {
+      return path;
+    }
+
+    if (depth >= limit) {
+      return null;
+    }
+
+    const validMoves = getValidMoveIndices(emptyIndex, gridSize);
+
+    for (let i = 0; i < validMoves.length; i++) {
+      const targetIndex = validMoves[i];
+      const nextState = [...state];
+      nextState[emptyIndex] = nextState[targetIndex];
+      nextState[targetIndex] = 0;
+
+      const nextKey = nextState.join(',');
+      const nextDepth = depth + 1;
+
+      // 1. Active branch cycle check: Do not re-visit states on current call stack
+      // 2. Transposition check: Prune if already explored at <= nextDepth
+      if (!pathSet.has(nextKey)) {
+        const prevDepth = visitedMinDepth.get(nextKey);
+        if (prevDepth === undefined || nextDepth < prevDepth) {
+          visitedMinDepth.set(nextKey, nextDepth);
+          nodesGenerated++;
+
+          pathSet.add(nextKey);
+          path.push(nextState);
+
+          const result = dls(nextState, targetIndex, nextDepth, limit, path, pathSet);
+          if (result) return result;
+
+          // Backtrack from current branch
+          path.pop();
+          pathSet.delete(nextKey);
+
+          if (reachedSafetyLimit) return null;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  const initialEmptyIndex = initialState.indexOf(0);
+
+  // Iterative Deepening Loop (limit = 0, 1, 2, ... maxDepth)
+  for (let limit = 0; limit <= maxDepth; limit++) {
+    reachedSafetyLimit = false;
+    visitedMinDepth.clear();
+    visitedMinDepth.set(initialKey, 0);
+    const pathSet = new Set([initialKey]);
+    const path = [initialState];
+
+    const solution = dls(initialState, initialEmptyIndex, 0, limit, path, pathSet);
+
+    if (solution) {
       const endTime = performance.now();
       return {
         solved: true,
-        solutionPath: path,
+        terminationReason: 'solved',
+        algorithm: 'DFS',
+        initialState,
+        finalState: solution[solution.length - 1],
+        solutionPath: solution,
+        solutionDepth: solution.length - 1,
         statesExplored,
         nodesGenerated,
-        solutionDepth: path.length - 1,
         executionTime: Number((endTime - startTime).toFixed(2)),
       };
     }
 
-    if (statesExplored >= maxStates) {
+    if (reachedSafetyLimit) {
       break;
-    }
-
-    // Depth limit check for DFS
-    if (current.depth >= maxDepth) {
-      continue;
-    }
-
-    const validMoves = getValidMoveIndices(current.emptyIndex, gridSize);
-
-    // Push valid moves onto the stack (LIFO)
-    for (let i = 0; i < validMoves.length; i++) {
-      const targetIndex = validMoves[i];
-      const nextState = [...current.state];
-      nextState[current.emptyIndex] = nextState[targetIndex];
-      nextState[targetIndex] = 0;
-
-      const nextKey = nextState.join(',');
-      const nextDepth = current.depth + 1;
-
-      // Prune if state was already visited at an equal or shallower depth
-      const prevDepth = visitedDepth.get(nextKey);
-      if (prevDepth === undefined || nextDepth < prevDepth) {
-        visitedDepth.set(nextKey, nextDepth);
-        nodesGenerated++;
-
-        stack.push({
-          state: nextState,
-          emptyIndex: targetIndex,
-          parent: current,
-          depth: nextDepth,
-        });
-      }
     }
   }
 
   const endTime = performance.now();
+  const errorMessage = reachedSafetyLimit
+    ? `Search stopped after exploring ${statesExplored.toLocaleString()} states. The puzzle is solvable but requires a deeper search limit or BFS.`
+    : `Search depth limit of ${maxDepth} reached without reaching goal state. The puzzle is solvable but requires a deeper search limit or BFS.`;
+
   return {
     solved: false,
+    terminationReason: 'search_limit',
+    algorithm: 'DFS',
+    initialState,
+    finalState: initialState,
     solutionPath: [],
+    solutionDepth: 0,
     statesExplored,
     nodesGenerated,
-    solutionDepth: 0,
     executionTime: Number((endTime - startTime).toFixed(2)),
-    error: `No solution found within maximum search depth limit of ${maxDepth}.`,
+    error: errorMessage,
   };
 }
 

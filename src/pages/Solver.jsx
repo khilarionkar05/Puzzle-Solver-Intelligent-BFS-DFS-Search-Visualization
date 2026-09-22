@@ -81,6 +81,12 @@ export default function Solver() {
     if (!initialPuzzleState) return;
 
     setIsPlaying(false);
+    setCurrentStep(0);
+    setSolutionPath([]);
+    setStatesExplored(0);
+    setNodesGenerated(0);
+    setSolutionDepth(0);
+    setExecutionTime(null);
     setSolverStatus('SOLVING');
     setErrorMessage('');
 
@@ -109,11 +115,23 @@ export default function Solver() {
           setCurrentStep(0);
           setSolverStatus('SOLVED');
           setIsPlaying(true); // Automatically begin step playback
+        } else if (result.terminationReason === 'unsolvable') {
+          setSolutionPath([]);
+          setSolutionDepth(0);
+          setSolverStatus('UNSOLVABLE');
+          setErrorMessage(result.error || 'The puzzle configuration is mathematically unsolvable.');
+        } else if (result.terminationReason === 'search_limit') {
+          setSolutionPath([]);
+          setSolutionDepth(0);
+          setCurrentStep(0);
+          setSolverStatus('SEARCH LIMIT REACHED');
+          setErrorMessage(result.error || 'Search stopped after reaching the configured state limit.');
         } else {
           setSolutionPath([]);
           setSolutionDepth(0);
+          setCurrentStep(0);
           setSolverStatus('NO SOLUTION');
-          setErrorMessage(result.error || 'No solution found within search limits.');
+          setErrorMessage(result.error || 'No solution found.');
         }
       } catch (err) {
         console.error('Solver engine error:', err);
@@ -176,6 +194,14 @@ export default function Solver() {
       nodesGenerated,
       executionTime,
       solved: solverStatus === 'SOLVED',
+      terminationReason:
+        solverStatus === 'SOLVED'
+          ? 'solved'
+          : solverStatus === 'UNSOLVABLE'
+          ? 'unsolvable'
+          : solverStatus === 'SEARCH LIMIT REACHED'
+          ? 'search_limit'
+          : 'search_limit',
     };
 
     try {
@@ -241,9 +267,9 @@ export default function Solver() {
                   ? 'status-running'
                   : solverStatus === 'SOLVED'
                   ? 'status-success'
-                  : solverStatus === 'NO SOLUTION' || solverStatus === 'ERROR'
+                  : solverStatus === 'UNSOLVABLE' || solverStatus === 'ERROR'
                   ? 'status-error'
-                  : solverStatus === 'PAUSED'
+                  : solverStatus === 'DEPTH LIMIT REACHED' || solverStatus === 'SEARCH LIMIT REACHED' || solverStatus === 'PAUSED'
                   ? 'status-paused'
                   : 'status-ready'
               }`}
@@ -384,13 +410,15 @@ export default function Solver() {
 
               <div className="metric-card">
                 <div className="metric-label">Solution Depth</div>
-                <div className="metric-value">{solutionDepth}</div>
+                <div className="metric-value">
+                  {solverStatus === 'SOLVED' ? solutionDepth : '—'}
+                </div>
               </div>
 
               <div className="metric-card">
                 <div className="metric-label">Current Step</div>
                 <div className="metric-value">
-                  {solutionPath.length > 0 ? currentStep : 0}
+                  {solutionPath.length > 0 ? currentStep : '—'}
                 </div>
               </div>
 
