@@ -5,6 +5,9 @@
 ## Project Type
 DAA Mini Project (Design and Analysis of Algorithms)
 
+## Live Demo 
+https://puzzle-solver-intelligent-bfs-dfs-search.onrender.com/
+
 ## Technologies
 - **React** (v18.3)
 - **Vite**
